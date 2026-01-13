@@ -1,0 +1,408 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "To-Do API",
+    "description": "API REST para gerenciamento de to-dos com compartilhamento entre usuários. Construída com Next.js + TypeScript + Supabase.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "API Support"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Servidor de desenvolvimento"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Endpoints de autenticação"
+    },
+    {
+      "name": "Todos",
+      "description": "CRUD de to-dos"
+    },
+    {
+      "name": "Sharing",
+      "description": "Compartilhamento de to-dos"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Token JWT obtido no login"
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "email": { "type": "string", "format": "email" },
+          "name": { "type": "string" },
+          "avatar_url": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Todo": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "user_id": { "type": "string", "format": "uuid" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "completed": { "type": "boolean" },
+          "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+          "due_date": { "type": "string", "format": "date-time" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "TodoShare": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "todo_id": { "type": "string", "format": "uuid" },
+          "owner_id": { "type": "string", "format": "uuid" },
+          "shared_with_id": { "type": "string", "format": "uuid" },
+          "permission": { "type": "string", "enum": ["view", "edit"] },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" },
+          "details": { "type": "object" }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "total": { "type": "integer" },
+          "totalPages": { "type": "integer" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/auth/signup": {
+      "post": {
+        "summary": "Registra um novo usuário",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email", "example": "usuario@exemplo.com" },
+                  "password": { "type": "string", "minLength": 6, "example": "senha123" },
+                  "name": { "type": "string", "example": "João Silva" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Usuário criado com sucesso" },
+          "400": { "description": "Dados inválidos" },
+          "409": { "description": "Email já está em uso" }
+        }
+      }
+    },
+    "/api/auth/signin": {
+      "post": {
+        "summary": "Realiza login do usuário",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Login realizado com sucesso" },
+          "401": { "description": "Credenciais inválidas" }
+        }
+      }
+    },
+    "/api/auth/signout": {
+      "post": {
+        "summary": "Realiza logout do usuário",
+        "tags": ["Auth"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Logout realizado com sucesso" },
+          "401": { "description": "Não autenticado" }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "summary": "Retorna dados do usuário logado",
+        "tags": ["Auth"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Dados do usuário" },
+          "401": { "description": "Não autenticado" }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "summary": "Renova o token de acesso",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["refresh_token"],
+                "properties": {
+                  "refresh_token": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Token renovado com sucesso" },
+          "401": { "description": "Token inválido ou expirado" }
+        }
+      }
+    },
+    "/api/todos": {
+      "get": {
+        "summary": "Lista todos os to-dos do usuário",
+        "tags": ["Todos"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "query", "name": "page", "schema": { "type": "integer", "default": 1 } },
+          { "in": "query", "name": "limit", "schema": { "type": "integer", "default": 10, "maximum": 100 } },
+          { "in": "query", "name": "completed", "schema": { "type": "string", "enum": ["true", "false"] } },
+          { "in": "query", "name": "priority", "schema": { "type": "string", "enum": ["low", "medium", "high"] } }
+        ],
+        "responses": {
+          "200": { "description": "Lista de to-dos com paginação" },
+          "401": { "description": "Não autenticado" }
+        }
+      },
+      "post": {
+        "summary": "Cria um novo to-do",
+        "tags": ["Todos"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title"],
+                "properties": {
+                  "title": { "type": "string", "maxLength": 255 },
+                  "description": { "type": "string", "maxLength": 1000 },
+                  "priority": { "type": "string", "enum": ["low", "medium", "high"], "default": "medium" },
+                  "due_date": { "type": "string", "format": "date-time" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "To-do criado com sucesso" },
+          "400": { "description": "Dados inválidos" },
+          "401": { "description": "Não autenticado" }
+        }
+      }
+    },
+    "/api/todos/{id}": {
+      "get": {
+        "summary": "Busca um to-do específico",
+        "tags": ["Todos"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Dados do to-do" },
+          "401": { "description": "Não autenticado" },
+          "403": { "description": "Sem permissão" },
+          "404": { "description": "To-do não encontrado" }
+        }
+      },
+      "put": {
+        "summary": "Atualiza um to-do",
+        "tags": ["Todos"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "description": { "type": "string" },
+                  "completed": { "type": "boolean" },
+                  "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+                  "due_date": { "type": "string", "format": "date-time" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "To-do atualizado" },
+          "400": { "description": "Dados inválidos" },
+          "401": { "description": "Não autenticado" },
+          "403": { "description": "Sem permissão" },
+          "404": { "description": "To-do não encontrado" }
+        }
+      },
+      "delete": {
+        "summary": "Deleta um to-do",
+        "tags": ["Todos"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "To-do deletado" },
+          "401": { "description": "Não autenticado" },
+          "403": { "description": "Sem permissão (apenas o dono pode deletar)" },
+          "404": { "description": "To-do não encontrado" }
+        }
+      }
+    },
+    "/api/todos/{id}/share": {
+      "get": {
+        "summary": "Lista usuários com quem o to-do foi compartilhado",
+        "tags": ["Sharing"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Lista de compartilhamentos" },
+          "401": { "description": "Não autenticado" },
+          "403": { "description": "Sem permissão" },
+          "404": { "description": "To-do não encontrado" }
+        }
+      },
+      "post": {
+        "summary": "Compartilha um to-do com outro usuário",
+        "tags": ["Sharing"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "permission": { "type": "string", "enum": ["view", "edit"], "default": "view" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Compartilhamento criado" },
+          "400": { "description": "Dados inválidos ou já compartilhado" },
+          "401": { "description": "Não autenticado" },
+          "403": { "description": "Sem permissão" },
+          "404": { "description": "To-do ou usuário não encontrado" }
+        }
+      }
+    },
+    "/api/todos/{id}/share/{shareId}": {
+      "delete": {
+        "summary": "Remove um compartilhamento",
+        "tags": ["Sharing"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "path", "name": "shareId", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Compartilhamento removido" },
+          "401": { "description": "Não autenticado" },
+          "403": { "description": "Sem permissão" },
+          "404": { "description": "Compartilhamento não encontrado" }
+        }
+      },
+      "patch": {
+        "summary": "Atualiza permissão de um compartilhamento",
+        "tags": ["Sharing"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "path", "name": "shareId", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["permission"],
+                "properties": {
+                  "permission": { "type": "string", "enum": ["view", "edit"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Permissão atualizada" },
+          "401": { "description": "Não autenticado" },
+          "403": { "description": "Sem permissão" },
+          "404": { "description": "Compartilhamento não encontrado" }
+        }
+      }
+    },
+    "/api/todos/shared": {
+      "get": {
+        "summary": "Lista to-dos compartilhados comigo",
+        "tags": ["Sharing"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "query", "name": "page", "schema": { "type": "integer", "default": 1 } },
+          { "in": "query", "name": "limit", "schema": { "type": "integer", "default": 10 } }
+        ],
+        "responses": {
+          "200": { "description": "Lista de to-dos compartilhados" },
+          "401": { "description": "Não autenticado" }
+        }
+      }
+    }
+  }
+}
